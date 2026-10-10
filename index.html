@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#3b3a8f">
+  <title>Liderazgo · Asistencia y Ranking</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ============ LOGIN ============ -->
+  <main id="vista-login" class="login hidden">
+    <form id="form-login" class="card login-card" autocomplete="on">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <h1>Liderazgo Transformacional</h1>
+        <p class="muted">Influencia idealizada · atributos</p>
+      </div>
+      <label>Nombre
+        <input id="login-nombre" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label>Contraseña
+        <div class="pw">
+          <input id="login-pass" type="password" name="password" autocomplete="current-password" required>
+          <button type="button" class="ghost sm" id="toggle-pass">Ver</button>
+        </div>
+      </label>
+      <p id="login-error" class="error" role="alert"></p>
+      <button class="primary" type="submit">Ingresar</button>
+    </form>
+  </main>
+
+  <!-- ============ APP ============ -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="topbar-in">
+        <div class="who">
+          <span class="brand-mark" aria-hidden="true">◆</span>
+          <div>
+            <strong id="user-name">—</strong>
+            <span id="user-rol" class="badge">—</span>
+          </div>
+        </div>
+        <button id="btn-logout" class="ghost sm">Salir</button>
+      </div>
+      <nav id="nav" class="nav" aria-label="Secciones"></nav>
+    </header>
+    <main id="contenido" class="content"></main>
+  </div>
+
+  <!-- ============ MODAL ============ -->
+  <dialog id="modal">
+    <button class="modal-x ghost sm" data-close aria-label="Cerrar">✕</button>
+    <div id="modal-body"></div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/scanner.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
