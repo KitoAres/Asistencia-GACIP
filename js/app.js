@@ -11,8 +11,29 @@
   const isStaff = () => !!state.user && state.user.rol !== 'user';
   const nombreDe = p => (p && (p.nombre_completo || p.nombre)) || '';
   const inicial = p => (nombreDe(p) || '?').trim().charAt(0).toUpperCase();
-  const makeQR = code => QRCode.toDataURL(code, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
   const csv = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+
+  /* ===================== Generador de QR Reparado ===================== */
+  // Si no tienes la librería qrcode.js, usa una API externa para generarlo
+  const makeQR = async (code) => {
+    try {
+      if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+        return await window.QRCode.toDataURL(code, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
+      }
+      // Fallback a API pública si no hay librería local
+      const res = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=2&data=${encodeURIComponent(code)}`);
+      if (!res.ok) throw new Error('Falló la conexión al servidor de QR');
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Error procesando imagen QR'));
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      throw new Error('No se pudo generar el QR: ' + e.message);
+    }
+  };
 
   /* ===================== Sesión ===================== */
   function showLogin() {
@@ -260,7 +281,7 @@
       e.preventDefault();
       const f = new FormData(e.target);
       const btn = e.target.querySelector('[type=submit]');
-      btn.disabled = true; $('#f-err').textContent = '';
+      btn.disabled = true; $('#f-err').textContent = 'Creando persona y generando QR...';
       let u;
       try {
         u = await Api.crearUsuario({
@@ -271,13 +292,15 @@
 
       let img = null;
       try { 
-        // Si el backend no genera qr_codigo a tiempo, usamos el id de usuario para asegurar que se cree
         const codeText = u.qr_codigo || u.id; 
         img = await makeQR(codeText); 
         await Api.guardarQr(u.id, img); 
         u.qr_imagen = img; 
       }
-      catch (_) { toast('Persona creada sin imagen previa del QR, se generará al abrir su ficha.', 'error'); }
+      catch (error) { 
+        console.error(error);
+        toast('Persona creada. Revisa tu conexión a internet para cargar su imagen QR.', 'error'); 
+      }
 
       state.personas.push(u);
       state.personas.sort((a, b) => a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase()));
@@ -326,10 +349,13 @@
     
     let img = u.qr_imagen;
     if (!img) { 
-        // Generamos el QR obligatoriamente si no existe
+      try {
         const codeText = u.qr_codigo || u.id;
         img = await makeQR(codeText); 
         Api.guardarQr(id, img).catch(() => {}); 
+      } catch (err) {
+        img = null; // Previene que rompa la pantalla si no hay internet
+      }
     }
 
     modal(`
@@ -338,8 +364,8 @@
       
       <div class="ficha">
         <div class="qr-box">
-          <img src="${img}" alt="QR de ${esc(nombreDe(u))}">
-          <p><button class="primary sm" id="dl-qr" style="width:100%">Descargar QR</button></p>
+          ${img ? `<img src="${img}" alt="QR de ${esc(nombreDe(u))}"><p><button class="primary sm" id="dl-qr" style="width:100%">Descargar QR</button></p>` 
+                : `<p class="muted" style="padding: 2rem; border: 1px dashed var(--line); border-radius:12px;">⚠️ No se pudo generar el QR por problemas de red.</p>`}
         </div>
         <div class="ficha-datos">
           <form id="f-ficha">
@@ -357,7 +383,9 @@
       </div>
       ${perfil ? perfilHTML(perfil) : ''}`);
 
-    if (img) $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
+    if (img) {
+      $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
+    }
     
     $('#f-ficha').onsubmit = async e => {
       e.preventDefault();
@@ -382,7 +410,7 @@
 
   /* ===================== Ranking (Solo asistencias) ===================== */
   views.ranking = async el => {
-    const rows = await Api.ranking(); // asumiendo que el api retorna la lista de usuarios con sus stats
+    const rows = await Api.ranking();
     
     // Forzamos el orden por número de asistencias de mayor a menor
     const validos = rows.filter(r => r.rol === 'user' || r.asistencias !== undefined);
@@ -434,13 +462,19 @@
     
     if (me.rol === 'user') {
       const perfil = await Api.perfil(me.id);
-      const img = me.qr_imagen || await makeQR(me.qr_codigo || me.id);
+      
+      let img = me.qr_imagen;
+      if(!img) {
+        try { img = await makeQR(me.qr_codigo || me.id); } catch(e) { img = ''; }
+      }
+
       bloque = `
         <section class="card">
           <div class="ficha">
             <div class="qr-box">
-              <img src="${img}" alt="Tu código QR">
-              <p><button class="primary sm" id="dl-qr" style="width:100%">Descargar mi QR</button></p>
+              ${img ? `<img src="${img}" alt="Tu código QR">
+                       <p><button class="primary sm" id="dl-qr" style="width:100%">Descargar mi QR</button></p>` 
+                    : `<p class="muted">Sin conexión para generar QR</p>`}
               <p class="muted sm-text">Muéstralo al encargado para marcar tu asistencia.</p>
             </div>
             <div class="ficha-datos">
