@@ -1,9 +1,7 @@
 (function () {
   'use strict';
-  const { $, $$, esc, toast, modal, close, confirm, hora, fechaHora, fechaCorta, fechaLarga, download, downloadText, slug, beep, TZ } = UI;
+  const { $,$$, esc, toast, modal, close, confirm, hora, fechaHora, fechaCorta, fechaLarga, download, downloadText, slug, beep, TZ } = UI;
 
-  // Escala de frecuencia 0-4 (formato MLQ). Los criterios salen de la tabla "criterios".
-  const ESCALA = ['Nunca', 'Rara vez', 'A veces', 'A menudo', 'Frecuentemente, si no siempre'];
   const ROL = { sudo: 'Sudo', admin: 'Admin', user: 'Participante' };
   const STAFF_TABS = [['scan', 'Escanear'], ['hoy', 'Hoy'], ['personas', 'Personas'], ['ranking', 'Ranking'], ['cuenta', 'Mi cuenta']];
   const TABS = { user: [['ranking', 'Ranking'], ['cuenta', 'Mi ficha']], admin: STAFF_TABS, sudo: STAFF_TABS };
@@ -14,8 +12,6 @@
   const nombreDe = p => (p && (p.nombre_completo || p.nombre)) || '';
   const inicial = p => (nombreDe(p) || '?').trim().charAt(0).toUpperCase();
   const makeQR = code => QRCode.toDataURL(code, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
-  const num = v => (v === null || v === undefined ? null : Number(v));
-  const fmt = v => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
   const csv = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
 
   /* ===================== Sesión ===================== */
@@ -69,17 +65,17 @@
   views.scan = async el => {
     const hoy = new Date().toLocaleDateString('es-BO', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
     el.innerHTML = `
-      <section class="card">
-        <h2>Pasar lista</h2>
-        <p class="muted">${esc(hoy)} · cada persona se registra una sola vez por día.</p>
+      <section class="card center-content">
+        <h2 style="color: var(--brand); font-size: 1.5rem;">Escanear Asistencia</h2>
+        <p class="muted">${esc(hoy)} · Registra la asistencia diaria.</p>
         <div id="reader" class="reader"></div>
-        <div class="row" style="justify-content:center">
+        <div class="row" style="justify-content:center; margin-top:1rem;">
           <button id="btn-cam" class="primary">Activar cámara</button>
           <button id="btn-switch" class="ghost hidden">Cambiar cámara</button>
         </div>
         <div id="scan-result" class="scan-result" role="status"></div>
       </section>
-      <section class="card"><h3>Registros de esta sesión</h3><ul id="scan-log" class="log"></ul></section>`;
+      <section class="card"><h3>Últimos escaneos de esta sesión</h3><ul id="scan-log" class="log"></ul></section>`;
     renderLog();
     $('#btn-cam').onclick = toggleCam;
     $('#btn-switch').onclick = async () => {
@@ -114,16 +110,16 @@
   }
   function pushLog(estado, nombre, ts) {
     state.scanLog.unshift({ estado, nombre, ts });
-    state.scanLog = state.scanLog.slice(0, 30);
+    state.scanLog = state.scanLog.slice(0, 10);
     renderLog();
   }
   function renderLog() {
     const ul = $('#scan-log');
     if (!ul) return;
-    const lbl = { ok: 'Registrado', ya: 'Ya estaba', bad: 'No válido' };
+    const lbl = { ok: 'Asistencia', ya: 'Ya marcó', bad: 'Inválido' };
     ul.innerHTML = state.scanLog.length
-      ? state.scanLog.map(l => `<li><span>${esc(l.nombre)} <span class="muted sm-text">${esc(hora(l.ts))}</span></span><span class="tag ${l.estado}">${lbl[l.estado]}</span></li>`).join('')
-      : '<li class="muted">Todavía no has escaneado a nadie.</li>';
+      ? state.scanLog.map(l => `<li><span><strong>${esc(l.nombre)}</strong> <span class="muted sm-text">${esc(hora(l.ts))}</span></span><span class="tag ${l.estado}">${lbl[l.estado]}</span></li>`).join('')
+      : '<li class="muted center">Esperando el primer escaneo...</li>';
   }
 
   async function onCode(text) {
@@ -134,15 +130,15 @@
       const r = await Api.registrar(text);
       if (r.estado === 'ok') {
         beep(true);
-        showResult('ok', '✔ Asistencia registrada', `${nombreDe(r)} · ${hora(r.hora)}`);
+        showResult('ok', '✔ Asistencia Registrada', `${nombreDe(r)} · ${hora(r.hora)}`);
         pushLog('ok', nombreDe(r), r.hora);
       } else if (r.estado === 'ya_registrado') {
         beep(false);
-        showResult('ya', 'Ya registrado hoy', `${nombreDe(r)} marcó a las ${hora(r.hora)}`);
+        showResult('ya', 'Asistencia ya registrada hoy', `${nombreDe(r)} marcó a las ${hora(r.hora)}`);
         pushLog('ya', nombreDe(r), r.hora);
       } else {
         beep(false);
-        showResult('bad', 'QR no válido', 'Este código no pertenece a ninguna persona registrada.');
+        showResult('bad', 'QR No Válido', 'Este código no pertenece a ninguna persona registrada.');
         pushLog('bad', 'QR desconocido', new Date().toISOString());
       }
     } catch (e) {
@@ -154,19 +150,19 @@
   /* ===================== Hoy ===================== */
   views.hoy = async el => {
     const d = await Api.hoy();
-    const fila = (p, extra) => `<li><span>${esc(nombreDe(p))} <span class="muted sm-text">@${esc(p.nombre)}</span></span><span class="muted sm-text">${extra}</span></li>`;
+    const fila = (p, extra) => `<li><span><strong>${esc(nombreDe(p))}</strong> <span class="muted sm-text">@${esc(p.nombre)}</span></span><span class="muted sm-text">${extra}</span></li>`;
     el.innerHTML = `
       <section class="card">
-        <div class="row between"><h2 style="margin:0">Asistencia de hoy</h2><button id="csv" class="ghost sm">Descargar CSV</button></div>
+        <div class="row between"><h2 style="margin:0">Asistencia de Hoy</h2><button id="csv" class="ghost sm">Descargar CSV</button></div>
         <p class="muted">${esc(fechaLarga(d.fecha))}</p>
         <div class="stats" style="grid-template-columns:repeat(2,1fr)">
           <div class="stat"><b>${d.presentes.length}</b><span>Presentes</span></div>
           <div class="stat"><b>${d.ausentes.length}</b><span>Faltan</span></div>
         </div>
-        <h3>Presentes</h3>
+        <h3 style="color:var(--ok)">Presentes</h3>
         <ul class="log">${d.presentes.length ? d.presentes.map(p => fila(p, esc(hora(p.hora)))).join('') : '<li class="muted">Nadie ha marcado todavía.</li>'}</ul>
-        <h3 style="margin-top:1rem">Faltan por marcar</h3>
-        <ul class="log">${d.ausentes.length ? d.ausentes.map(p => fila(p, '')).join('') : '<li class="muted">Todos presentes 🎉</li>'}</ul>
+        <h3 style="margin-top:1.5rem; color:var(--bad)">Faltan por marcar</h3>
+        <ul class="log">${d.ausentes.length ? d.ausentes.map(p => fila(p, '')).join('') : '<li class="muted">Todos están presentes 🎉</li>'}</ul>
       </section>`;
     $('#csv').onclick = () => {
       const rows = [['Estado', 'Usuario', 'Nombre completo', 'Hora']]
@@ -181,9 +177,9 @@
     state.personas = await Api.listarUsuarios();
     el.innerHTML = `
       <div class="toolbar">
-        <input id="q" type="search" placeholder="Buscar por nombre…" value="${esc(state.q)}">
+        <input id="q" type="search" placeholder="Buscar persona..." value="${esc(state.q)}">
         ${isSudo() ? `<select id="rolf"><option value="todos">Todos</option><option value="user">Participantes</option><option value="admin">Admins</option></select>
-        <button id="nuevo" class="primary">+ Nueva persona</button>` : ''}
+        <button id="nuevo" class="primary">+ Nuevo Registro</button>` : ''}
       </div>
       <div id="lista"></div>`;
     $('#q').oninput = e => { state.q = e.target.value; renderLista(); };
@@ -203,6 +199,7 @@
     const rows = state.personas.filter(p =>
       (state.rol === 'todos' || p.rol === state.rol) &&
       `${p.nombre} ${p.nombre_completo || ''}`.toLowerCase().includes(q));
+    
     box.innerHTML = rows.length ? rows.map(p => `
       <div class="persona" data-id="${p.id}">
         <div class="avatar">${esc(inicial(p))}</div>
@@ -211,10 +208,9 @@
           <span class="muted sm-text">@${esc(p.nombre)}</span>
         </div>
         <div class="acts">
-          <button class="ghost sm" data-act="ficha">Ficha</button>
-          ${p.rol === 'user' ? '<button class="ghost sm" data-act="evaluar">Evaluar</button>' : ''}
+          <button class="primary sm" data-act="ficha">Ver QR / Ficha</button>
           <button class="ghost sm" data-act="asist">Marcar hoy</button>
-          ${isSudo() ? '<button class="ghost sm" data-act="borrar" style="color:var(--bad)">Eliminar</button>' : ''}
+          ${isSudo() ? '<button class="ghost sm danger-text" data-act="borrar" style="color:var(--bad)">Eliminar</button>' : ''}
         </div>
       </div>`).join('') : '<p class="muted center">No hay personas para mostrar.</p>';
   }
@@ -226,18 +222,17 @@
     const p = state.personas.find(x => x.id === id);
     try {
       if (btn.dataset.act === 'ficha') await openFicha(id);
-      else if (btn.dataset.act === 'evaluar') await openEvaluar(id);
       else if (btn.dataset.act === 'asist') {
-        const r = await Api.registrar(p.qr_codigo);
+        const r = await Api.registrar(p.qr_codigo || p.id);
         if (r.estado === 'ok') toast(`Asistencia de ${nombreDe(p)} registrada`, 'ok');
-        else if (r.estado === 'ya_registrado') toast(`${nombreDe(p)} ya estaba registrado hoy`);
+        else if (r.estado === 'ya_registrado') toast(`${nombreDe(p)} ya registró su asistencia hoy`);
         else toast('QR no válido', 'error');
       } else if (btn.dataset.act === 'borrar') {
-        if (await confirm(`¿Eliminar a ${nombreDe(p)}? Se borran también su asistencia y evaluaciones.`, 'Eliminar')) {
+        if (await confirm(`¿Eliminar definitivamente a ${nombreDe(p)}?`, 'Eliminar')) {
           await Api.eliminarUsuario(id);
           state.personas = state.personas.filter(x => x.id !== id);
           renderLista();
-          toast('Persona eliminada', 'ok');
+          toast('Persona eliminada del sistema', 'ok');
         }
       }
     } catch (err) { toast(err.message, 'error'); }
@@ -246,18 +241,21 @@
   /* ---------- Nueva persona (genera y guarda el QR) ---------- */
   function openNuevo() {
     modal(`
-      <h3>Nueva persona</h3>
+      <h3 style="color: var(--brand); text-align: center;">Registrar Nueva Persona</h3>
       <form id="f-nuevo">
         <div class="grid2">
-          <label>Nombre de usuario<input name="nombre" required minlength="2" autocapitalize="none" autocomplete="off"></label>
-          <label>Contraseña<input name="password" required minlength="4" autocomplete="off"></label>
+          <label>Nombre de usuario (Login)<input name="nombre" required minlength="2" autocapitalize="none" autocomplete="off"></label>
+          <label>Contraseña temporal<input name="password" required minlength="4" autocomplete="off"></label>
         </div>
-        <label>Rol<select name="rol"><option value="user">Participante</option><option value="admin">Admin</option></select></label>
-        <label>Nombre completo<input name="nombre_completo"></label>
-        <label>Observaciones<textarea name="observaciones"></textarea></label>
+        <label>Nombre completo<input name="nombre_completo" required></label>
+        <label>Rol en el sistema<select name="rol"><option value="user">Participante</option><option value="admin">Admin</option></select></label>
         <p id="f-err" class="error"></p>
-        <div class="row end"><button type="button" class="ghost" data-close>Cancelar</button><button class="primary" type="submit">Crear y generar QR</button></div>
+        <div class="row end" style="margin-top: 1rem;">
+          <button type="button" class="ghost" data-close>Cancelar</button>
+          <button class="primary" type="submit">Guardar y Generar QR</button>
+        </div>
       </form>`);
+      
     $('#f-nuevo').onsubmit = async e => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -267,13 +265,19 @@
       try {
         u = await Api.crearUsuario({
           nombre: f.get('nombre'), password: f.get('password'), rol: f.get('rol'),
-          ficha: { nombre_completo: f.get('nombre_completo'), observaciones: f.get('observaciones') }
+          ficha: { nombre_completo: f.get('nombre_completo') }
         });
       } catch (err) { $('#f-err').textContent = err.message; btn.disabled = false; return; }
 
       let img = null;
-      try { img = await makeQR(u.qr_codigo); await Api.guardarQr(u.id, img); u.qr_imagen = img; }
-      catch (_) { toast('Persona creada, pero el QR no se pudo guardar. Ábrelo desde su ficha.', 'error'); }
+      try { 
+        // Si el backend no genera qr_codigo a tiempo, usamos el id de usuario para asegurar que se cree
+        const codeText = u.qr_codigo || u.id; 
+        img = await makeQR(codeText); 
+        await Api.guardarQr(u.id, img); 
+        u.qr_imagen = img; 
+      }
+      catch (_) { toast('Persona creada sin imagen previa del QR, se generará al abrir su ficha.', 'error'); }
 
       state.personas.push(u);
       state.personas.sort((a, b) => a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase()));
@@ -285,12 +289,12 @@
 
   function showQR(u, img, pass) {
     modal(`
-      <h3>Persona creada ✔</h3>
+      <h3 style="text-align:center; color: var(--ok);">¡Registro Exitoso!</h3>
       <div class="qr-box">
         <img src="${img}" alt="Código QR de ${esc(nombreDe(u))}">
-        <p><strong>${esc(nombreDe(u))}</strong><br><span class="muted sm-text">Usuario: ${esc(u.nombre)} · Contraseña: ${esc(pass)}</span></p>
-        <p class="muted sm-text">El QR ya quedó guardado en su ficha.</p>
-        <div class="row" style="justify-content:center">
+        <p style="font-size: 1.1rem;"><strong>${esc(nombreDe(u))}</strong></p>
+        <p class="muted">Usuario: <strong>${esc(u.nombre)}</strong> <br> Contraseña: <strong>${esc(pass)}</strong></p>
+        <div class="row" style="justify-content:center; margin-top: 1rem;">
           <button class="primary" id="dl-qr">Descargar QR</button>
           <button class="ghost" data-close>Cerrar</button>
         </div>
@@ -299,46 +303,62 @@
   }
 
   /* ---------- Ficha (ver/editar) ---------- */
-  function perfilHTML(p, canDel) {
-    const bars = p.criterios.map(c => {
-      const v = num(c.promedio);
-      return `<div class="ev" style="display:block"><div class="row between"><span>${esc(c.nombre)}</span><b>${fmt(v)}</b></div><div class="bar"><i style="width:${v === null ? 0 : (v / 4) * 100}%"></i></div></div>`;
-    }).join('');
-    const evs = p.evaluaciones.length
-      ? p.evaluaciones.map(e => `<div class="ev"><span>${esc(e.actividad)} <span class="muted sm-text">· ${esc(fechaHora(e.creado_en))}</span></span><span class="row"><b>${fmt(e.promedio)}</b>${canDel ? `<button class="ghost sm" data-ev="${e.id}">Quitar</button>` : ''}</span></div>`).join('')
-      : '<p class="muted">Aún sin evaluaciones.</p>';
-    const asis = `<p class="muted sm-text">${p.asistencias.length} asistencia(s) registradas</p><div class="chips">${p.asistencias.slice(0, 12).map(f => `<span class="chip">${esc(fechaCorta(f))}</span>`).join('')}</div>`;
-    return `<h4>Influencia idealizada (atributos) · promedio 0–4</h4>${bars}<h4>Evaluaciones</h4>${evs}<h4>Asistencia</h4>${asis}`;
+  function perfilHTML(p) {
+    const asis = p.asistencias.length
+      ? `<div class="stats" style="grid-template-columns:1fr; margin-bottom: 1rem;">
+           <div class="stat">
+             <b style="color:var(--brand); font-size: 2rem;">${p.asistencias.length}</b>
+             <span>Asistencias Totales</span>
+           </div>
+         </div>
+         <div class="chips">${p.asistencias.map(f => `<span class="chip">${esc(fechaCorta(f))}</span>`).join('')}</div>`
+      : '<p class="muted center" style="padding: 1rem; border: 1px dashed var(--line); border-radius: 12px;">Aún no tiene asistencias registradas.</p>';
+    return `<h4 style="margin-top:1.5rem; text-align:center;">Historial de Asistencia</h4>${asis}`;
   }
 
   async function openFicha(id) {
     const base = state.personas.find(x => x.id === id);
-    modal('<p class="muted center">Cargando…</p>');
+    modal('<p class="muted center">Cargando información...</p>');
     const [u, perfil] = await Promise.all([
       Api.verUsuario(id),
       base && base.rol === 'user' ? Api.perfil(id) : Promise.resolve(null)
     ]);
+    
     let img = u.qr_imagen;
-    if (!img && isSudo()) { img = await makeQR(u.qr_codigo); Api.guardarQr(id, img).catch(() => { }); }
+    if (!img) { 
+        // Generamos el QR obligatoriamente si no existe
+        const codeText = u.qr_codigo || u.id;
+        img = await makeQR(codeText); 
+        Api.guardarQr(id, img).catch(() => {}); 
+    }
 
     modal(`
-      <h3>${esc(nombreDe(u))}<span class="badge ${u.rol}">${ROL[u.rol]}</span></h3>
-      <p class="muted sm-text">Usuario: @${esc(u.nombre)}</p>
+      <h3 style="text-align:center;">${esc(nombreDe(u))} <span class="badge ${u.rol}">${ROL[u.rol]}</span></h3>
+      <p class="muted sm-text center" style="margin-top:-10px;">@${esc(u.nombre)}</p>
+      
       <div class="ficha">
         <div class="qr-box">
-          ${img ? `<img src="${img}" alt="QR de ${esc(nombreDe(u))}"><p><button class="ghost sm" id="dl-qr">Descargar QR</button></p>` : '<p class="muted">Sin QR</p>'}
+          <img src="${img}" alt="QR de ${esc(nombreDe(u))}">
+          <p><button class="primary sm" id="dl-qr" style="width:100%">Descargar QR</button></p>
         </div>
-        <form id="f-ficha">
-          <label>Nombre completo<input name="nombre_completo" value="${esc(u.nombre_completo)}"></label>
-          <label>Observaciones<textarea name="observaciones">${esc(u.observaciones)}</textarea></label>
-          <div class="row end"><button class="primary" type="submit">Guardar cambios</button></div>
-        </form>
+        <div class="ficha-datos">
+          <form id="f-ficha">
+            <label>Nombre completo<input name="nombre_completo" value="${esc(u.nombre_completo)}"></label>
+            <button class="ghost" style="width:100%; margin-top:0.5rem;" type="submit">Actualizar Datos</button>
+          </form>
+          ${isSudo() ? `
+          <hr style="border:0; border-top:1px solid var(--line); margin: 1rem 0;">
+          <label class="muted sm-text">Restablecer Contraseña</label>
+          <div class="row" style="flex-wrap: nowrap;">
+            <input id="new-pass" placeholder="Nueva clave" style="flex:1; margin:0;" autocomplete="off">
+            <button class="danger sm" id="btn-reset">Cambiar</button>
+          </div>` : ''}
+        </div>
       </div>
-      ${isSudo() ? `<h4>Restablecer contraseña</h4>
-        <div class="row"><input id="new-pass" placeholder="Nueva contraseña" style="flex:1;margin:0" autocomplete="off"><button class="ghost" id="btn-reset">Cambiar</button></div>` : ''}
-      ${perfil ? perfilHTML(perfil, true) : ''}`);
+      ${perfil ? perfilHTML(perfil) : ''}`);
 
     if (img) $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
+    
     $('#f-ficha').onsubmit = async e => {
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
@@ -347,89 +367,62 @@
         const i = state.personas.findIndex(x => x.id === id);
         if (i >= 0) state.personas[i] = { ...state.personas[i], ...nu };
         renderLista();
-        toast('Ficha actualizada', 'ok');
+        toast('Datos actualizados', 'ok');
       } catch (err) { toast(err.message, 'error'); }
     };
+    
     if (isSudo()) {
       $('#btn-reset').onclick = async () => {
+        if(!$('#new-pass').value) return toast('Ingresa una contraseña válida', 'error');
         try { await Api.cambiarPassword(id, $('#new-pass').value); $('#new-pass').value = ''; toast('Contraseña actualizada', 'ok'); }
         catch (err) { toast(err.message, 'error'); }
       };
     }
-    $$('[data-ev]').forEach(b => b.onclick = async () => {
-      try {
-        if (await confirm('¿Quitar esta evaluación?', 'Quitar')) {
-          await Api.eliminarEvaluacion(b.dataset.ev);
-          toast('Evaluación eliminada', 'ok');
-          await openFicha(id);
-        }
-      } catch (err) { toast(err.message, 'error'); }
-    });
   }
 
-  /* ---------- Evaluar ---------- */
-  async function openEvaluar(id) {
-    const p = state.personas.find(x => x.id === id);
-    const crit = await Api.criterios();
-    modal(`
-      <h3>Evaluar a ${esc(nombreDe(p))}</h3>
-      <p class="muted sm-text">¿Con qué frecuencia mostró esta conducta durante la actividad?</p>
-      <form id="f-eval">
-        <label>Actividad<input name="actividad" required placeholder="Ej.: Actividad 3 · Dinámica de grupo"></label>
-        ${crit.map(c => `
-          <fieldset class="crit">
-            <legend>${esc(c.nombre)}</legend>
-            <div class="muted sm-text">${esc(c.descripcion || '')}</div>
-            <div class="pills">${[0, 1, 2, 3, 4].map(n => `<label class="pill"><input type="radio" name="c${c.id}" value="${n}" required><span>${n}</span></label>`).join('')}</div>
-          </fieldset>`).join('')}
-        <p class="muted sm-text">${ESCALA.map((t, i) => `${i} = ${t}`).join(' · ')}</p>
-        <p id="f-err" class="error"></p>
-        <div class="row end"><button type="button" class="ghost" data-close>Cancelar</button><button class="primary" type="submit">Guardar evaluación</button></div>
-      </form>`);
-    $('#f-eval').onsubmit = async e => {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      const puntajes = {};
-      crit.forEach(c => { puntajes[c.id] = Number(f.get('c' + c.id)); });
-      const btn = e.target.querySelector('[type=submit]');
-      btn.disabled = true;
-      try {
-        await Api.guardarEvaluacion(id, f.get('actividad'), puntajes);
-        close();
-        toast('Evaluación guardada', 'ok');
-      } catch (err) { $('#f-err').textContent = err.message; btn.disabled = false; }
-    };
-  }
-
-  /* ===================== Ranking ===================== */
+  /* ===================== Ranking (Solo asistencias) ===================== */
   views.ranking = async el => {
-    const rows = await Api.ranking();
-    const evald = rows.filter(r => r.promedio !== null && r.promedio !== undefined);
-    const sin = rows.filter(r => r.promedio === null || r.promedio === undefined);
+    const rows = await Api.ranking(); // asumiendo que el api retorna la lista de usuarios con sus stats
+    
+    // Forzamos el orden por número de asistencias de mayor a menor
+    const validos = rows.filter(r => r.rol === 'user' || r.asistencias !== undefined);
+    validos.sort((a, b) => (b.asistencias || 0) - (a.asistencias || 0));
+
     let pos = 0, prev = null, i = 0;
-    evald.forEach(r => { i++; if (num(r.promedio) !== prev) { pos = i; prev = num(r.promedio); } r.pos = pos; });
+    validos.forEach(r => { 
+        i++; 
+        if (r.asistencias !== prev) { pos = i; prev = r.asistencias; } 
+        r.pos = pos; 
+    });
 
     const fila = r => {
-      const v = num(r.promedio);
-      const yo = r.id === state.user.id;
-      return `<div class="rank ${r.pos ? 'top' + (r.pos <= 3 ? r.pos : '') : ''} ${yo ? 'yo' : ''}">
-        <div class="pos">${r.pos || '–'}</div>
+      const yo = state.user && r.id === state.user.id;
+      let medalla = r.pos;
+      if(r.pos === 1) medalla = '🥇';
+      if(r.pos === 2) medalla = '🥈';
+      if(r.pos === 3) medalla = '🥉';
+
+      return `<div class="rank ${r.pos <= 3 ? 'top' + r.pos : ''} ${yo ? 'yo' : ''}">
+        <div class="pos">${medalla}</div>
         <div class="body">
-          <div class="name"><span>${esc(nombreDe(r))}${yo ? ' <span class="muted sm-text">(tú)</span>' : ''}</span><span>${fmt(v)}</span></div>
-          <div class="bar"><i style="width:${v === null ? 0 : (v / 4) * 100}%"></i></div>
-          <span class="muted sm-text">${r.evaluaciones} evaluación(es) · ${r.asistencias} asistencia(s)</span>
+          <div class="name"><span>${esc(nombreDe(r))}${yo ? ' <span class="muted sm-text">(Tú)</span>' : ''}</span></div>
+          <span class="muted sm-text">@${esc(r.nombre)}</span>
+        </div>
+        <div class="rank-stats">
+          ${r.asistencias || 0}
+          <span class="muted sm-text" style="display:block; font-size:0.7rem; font-weight:normal; text-transform:uppercase;">Asist.</span>
         </div>
       </div>`;
     };
 
     el.innerHTML = `
-      <section class="card">
-        <h2>Tabla de líderes</h2>
-        <p class="muted">Promedio (0–4) de las conductas de influencia idealizada (atributos) mostradas en las actividades.</p>
+      <section class="card banner-ranking" style="background: linear-gradient(135deg, var(--brand), var(--accent)); text-align:center; padding: 1.5rem; color: #fff; border: none;">
+        <h2 style="margin:0; font-size: 1.6rem; color: #fff;">🏆 Ranking GACIP</h2>
+        <p style="opacity:0.9; margin:0; font-size: 0.9rem;">Voluntarios con más asistencias marcadas.</p>
       </section>
-      ${evald.map(fila).join('')}
-      ${sin.length ? `<h4 class="muted">Sin evaluar todavía</h4>${sin.map(fila).join('')}` : ''}
-      ${!rows.length ? '<p class="muted center">Aún no hay participantes.</p>' : ''}`;
+      <div style="margin-top: 1rem;">
+        ${validos.length ? validos.map(fila).join('') : '<p class="muted center">Aún no hay asistencias registradas.</p>'}
+      </div>`;
   };
 
   /* ===================== Mi cuenta / Mi ficha ===================== */
@@ -438,27 +431,29 @@
     state.user = me;
     $('#user-name').textContent = nombreDe(me);
     let bloque = '';
+    
     if (me.rol === 'user') {
       const perfil = await Api.perfil(me.id);
-      const img = me.qr_imagen || await makeQR(me.qr_codigo);
+      const img = me.qr_imagen || await makeQR(me.qr_codigo || me.id);
       bloque = `
         <section class="card">
           <div class="ficha">
             <div class="qr-box">
               <img src="${img}" alt="Tu código QR">
-              <p><button class="ghost sm" id="dl-qr">Descargar mi QR</button></p>
-              <p class="muted sm-text">Muéstralo al admin para registrar tu asistencia.</p>
+              <p><button class="primary sm" id="dl-qr" style="width:100%">Descargar mi QR</button></p>
+              <p class="muted sm-text">Muéstralo al encargado para marcar tu asistencia.</p>
             </div>
-            <div>
-              <h2>${esc(nombreDe(me))}</h2>
+            <div class="ficha-datos">
+              <h2 style="color:var(--brand); margin-bottom: 0;">${esc(nombreDe(me))}</h2>
               <p class="muted">@${esc(me.nombre)}</p>
-              ${perfilHTML(perfil, false)}
+              ${perfilHTML(perfil)}
             </div>
           </div>
         </section>`;
     } else {
-      bloque = `<section class="card"><h2>${esc(nombreDe(me))}</h2><p class="muted">@${esc(me.nombre)} · ${ROL[me.rol]}</p></section>`;
+      bloque = `<section class="card center"><h2 style="color:var(--brand);">${esc(nombreDe(me))}</h2><p class="muted">@${esc(me.nombre)} · ${ROL[me.rol]}</p></section>`;
     }
+    
     el.innerHTML = `${bloque}
       <section class="card">
         <h3>Cambiar contraseña</h3>
@@ -466,15 +461,19 @@
           <label>Contraseña actual<input type="password" name="actual" autocomplete="current-password" required></label>
           <div class="grid2">
             <label>Nueva contraseña<input type="password" name="nueva" autocomplete="new-password" minlength="4" required></label>
-            <label>Repetir nueva<input type="password" name="rep" autocomplete="new-password" minlength="4" required></label>
+            <label>Repetir nueva contraseña<input type="password" name="rep" autocomplete="new-password" minlength="4" required></label>
           </div>
           <p id="f-err" class="error"></p>
-          <button class="primary" type="submit">Actualizar contraseña</button>
+          <button class="primary" style="width:100%; margin-top: 0.5rem;" type="submit">Actualizar contraseña</button>
         </form>
-      </section>`;
+      </section>
+      <div class="center" style="margin-top: 1rem;"><button class="ghost danger-text" id="btn-logout-inside" style="color: var(--bad); border-color: var(--bad);">Cerrar Sesión</button></div>`;
+      
     const dl = $('#dl-qr');
-    if (dl) dl.onclick = () => download(`qr-${slug(me.nombre)}.png`, me.qr_imagen || '');
-    if (dl && !me.qr_imagen) dl.onclick = async () => download(`qr-${slug(me.nombre)}.png`, await makeQR(me.qr_codigo));
+    if (dl) dl.onclick = () => download(`qr-${slug(me.nombre)}.png`, me.qr_imagen || img);
+    
+    $('#btn-logout-inside').onclick = $('#btn-logout').onclick; // Vincula al boton principal de cierre
+
     $('#f-pass').onsubmit = async e => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -507,7 +506,7 @@
       $('#toggle-pass').textContent = ver ? 'Ocultar' : 'Ver';
     };
     $('#btn-logout').onclick = async () => {
-      await Scanner.stop();
+      if(Scanner.active) await Scanner.stop();
       await Api.logout();
       state.user = null; state.scanLog = [];
       showLogin();
