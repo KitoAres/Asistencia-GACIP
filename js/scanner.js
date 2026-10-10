@@ -6,12 +6,15 @@ window.Scanner = (function () {
   S.start = async function (elId, onCode, facing = 'environment') {
     if (S.active) await S.stop();
     S.qr = new Html5Qrcode(elId, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+    
+    // Configuramos un tamaño fijo (250px) para evitar que la cámara colapse y se cierre
     await S.qr.start(
       { facingMode: facing },
       {
         fps: 10,
-        aspectRatio: 1,
-        qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.7); return { width: s, height: s }; }
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false
       },
       text => onCode(text),
       () => { /* frames sin QR: se ignoran */ }
