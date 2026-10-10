@@ -1,8 +1,7 @@
 window.UI = (function () {
   'use strict';
   const TZ = (window.APP_CONFIG && window.APP_CONFIG.ZONA_HORARIA) || 'America/La_Paz';
-  const $ = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const $ = (s, r = document) => r.querySelector(s);   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let tt;
@@ -41,7 +40,7 @@ window.UI = (function () {
 
   const hora = ts => new Date(ts).toLocaleTimeString('es-BO', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
   const fechaHora = ts => new Date(ts).toLocaleDateString('es-BO', { timeZone: TZ, day: '2-digit', month: 'short' });
-  // 'YYYY-MM-DD' -> '05 oct' sin desfase de zona horaria
+  
   function fechaCorta(d) {
     const [y, m, dd] = String(d).split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString('es-BO', { timeZone: 'UTC', day: '2-digit', month: 'short' });
@@ -57,13 +56,12 @@ window.UI = (function () {
     document.body.appendChild(a); a.click(); a.remove();
   }
   function downloadText(name, text, mime = 'text/csv;charset=utf-8') {
-    const url = URL.createObjectURL(new Blob(['﻿' + text], { type: mime }));
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + text], { type: mime }));
     download(name, url);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const slug = s => String(s || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  const slug = s => String(s || 'archivo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
 
-  // Pitido corto como confirmación del escaneo
   let ac;
   function beep(ok = true) {
     try {
@@ -73,9 +71,9 @@ window.UI = (function () {
       g.gain.value = 0.08;
       o.connect(g); g.connect(ac.destination);
       o.start(); o.stop(ac.currentTime + (ok ? 0.12 : 0.28));
-    } catch (_) { /* sin audio */ }
+    } catch (_) { }
     if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]);
   }
 
-  return { $, $$, esc, toast, modal, close, confirm, hora, fechaHora, fechaCorta, fechaLarga, download, downloadText, slug, beep, TZ };
+  return { $,$$, esc, toast, modal, close, confirm, hora, fechaHora, fechaCorta, fechaLarga, download, downloadText, slug, beep, TZ };
 })();
