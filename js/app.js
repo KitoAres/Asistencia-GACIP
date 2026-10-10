@@ -418,16 +418,30 @@
     }
   }
 
-  /* ===================== Ranking (Solo asistencias, Solo PARTICIPANTES) ===================== */
+ /* ===================== Ranking (Solo asistencias, Solo PARTICIPANTES) ===================== */
   views.ranking = async el => {
-    const rows = await Api.ranking();
+    el.innerHTML = '<p class="muted center">Calculando posiciones...</p>';
     
-    // Filtro estricto: Solo incluimos a los que tienen rol 'user'
-    const validos = rows.filter(r => r.rol === 'user');
+    // Obtenemos TODOS los usuarios y los datos del ranking al mismo tiempo
+    const [usuarios, rankingData] = await Promise.all([
+      Api.listarUsuarios(),
+      Api.ranking().catch(() => []) // Si falla el ranking del backend, usamos arreglo vacío
+    ]);
+    
+    // 1. Filtramos estrictamente a los participantes (rol: user)
+    // 2. Cruzamos sus datos con la cantidad de asistencias que dice el ranking
+    const validos = usuarios.filter(u => u.rol === 'user').map(u => {
+      const stats = rankingData.find(r => r.id === u.id);
+      return {
+        ...u,
+        asistencias: stats ? Number(stats.asistencias || 0) : 0
+      };
+    });
     
     // Ordenamos de mayor a menor asistencia
-    validos.sort((a, b) => (b.asistencias || 0) - (a.asistencias || 0));
+    validos.sort((a, b) => b.asistencias - a.asistencias);
 
+    // Calculamos las posiciones reales (los empates comparten posición)
     let pos = 0, prev = null, i = 0;
     validos.forEach(r => { 
         i++; 
@@ -438,18 +452,22 @@
     const fila = r => {
       const yo = state.user && r.id === state.user.id;
       let medalla = r.pos;
-      if(r.pos === 1) medalla = '🥇';
-      if(r.pos === 2) medalla = '🥈';
-      if(r.pos === 3) medalla = '🥉';
+      
+      // Solo damos medallas a los primeros 3 lugares SI tienen al menos 1 asistencia
+      if(r.pos === 1 && r.asistencias > 0) medalla = '🥇';
+      else if(r.pos === 2 && r.asistencias > 0) medalla = '🥈';
+      else if(r.pos === 3 && r.asistencias > 0) medalla = '🥉';
 
-      return `<div class="rank ${r.pos <= 3 ? 'top' + r.pos : ''} ${yo ? 'yo' : ''}">
+      const isTop = r.pos <= 3 && r.asistencias > 0;
+
+      return `<div class="rank ${isTop ? 'top' + r.pos : ''} ${yo ? 'yo' : ''}">
         <div class="pos">${medalla}</div>
         <div class="body">
           <div class="name"><span>${esc(nombreDe(r))}${yo ? ' <span class="muted sm-text">(Tú)</span>' : ''}</span></div>
           <span class="muted sm-text">@${esc(r.nombre)}</span>
         </div>
         <div class="rank-stats">
-          ${r.asistencias || 0}
+          ${r.asistencias}
           <span class="muted sm-text" style="display:block; font-size:0.7rem; font-weight:normal; text-transform:uppercase;">Asist.</span>
         </div>
       </div>`;
@@ -461,7 +479,7 @@
         <p style="opacity:0.9; margin:0; font-size: 0.9rem;">Voluntarios con más asistencias marcadas.</p>
       </section>
       <div style="margin-top: 1rem;">
-        ${validos.length ? validos.map(fila).join('') : '<p class="muted center">Aún no hay asistencias registradas.</p>'}
+        ${validos.length ? validos.map(fila).join('') : '<p class="muted center">Aún no hay participantes registrados.</p>'}
       </div>`;
   };
 
