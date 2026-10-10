@@ -13,14 +13,12 @@
   const inicial = p => (nombreDe(p) || '?').trim().charAt(0).toUpperCase();
   const csv = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
 
-  /* ===================== Generador de QR Reparado ===================== */
-  // Si no tienes la librería qrcode.js, usa una API externa para generarlo
+  /* ===================== Generador de QR ===================== */
   const makeQR = async (code) => {
     try {
       if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
         return await window.QRCode.toDataURL(code, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
       }
-      // Fallback a API pública si no hay librería local
       const res = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=2&data=${encodeURIComponent(code)}`);
       if (!res.ok) throw new Error('Falló la conexión al servidor de QR');
       const blob = await res.blob();
@@ -172,23 +170,28 @@
   views.hoy = async el => {
     const d = await Api.hoy();
     const fila = (p, extra) => `<li><span><strong>${esc(nombreDe(p))}</strong> <span class="muted sm-text">@${esc(p.nombre)}</span></span><span class="muted sm-text">${extra}</span></li>`;
+    
+    // Opcional: Filtrar admins de la vista de "Faltan" si el backend los trae
+    const ausentesReales = d.ausentes.filter(a => a.rol === 'user');
+
     el.innerHTML = `
       <section class="card">
         <div class="row between"><h2 style="margin:0">Asistencia de Hoy</h2><button id="csv" class="ghost sm">Descargar CSV</button></div>
         <p class="muted">${esc(fechaLarga(d.fecha))}</p>
         <div class="stats" style="grid-template-columns:repeat(2,1fr)">
           <div class="stat"><b>${d.presentes.length}</b><span>Presentes</span></div>
-          <div class="stat"><b>${d.ausentes.length}</b><span>Faltan</span></div>
+          <div class="stat"><b>${ausentesReales.length}</b><span>Faltan</span></div>
         </div>
         <h3 style="color:var(--ok)">Presentes</h3>
         <ul class="log">${d.presentes.length ? d.presentes.map(p => fila(p, esc(hora(p.hora)))).join('') : '<li class="muted">Nadie ha marcado todavía.</li>'}</ul>
         <h3 style="margin-top:1.5rem; color:var(--bad)">Faltan por marcar</h3>
-        <ul class="log">${d.ausentes.length ? d.ausentes.map(p => fila(p, '')).join('') : '<li class="muted">Todos están presentes 🎉</li>'}</ul>
+        <ul class="log">${ausentesReales.length ? ausentesReales.map(p => fila(p, '')).join('') : '<li class="muted">Todos están presentes 🎉</li>'}</ul>
       </section>`;
+      
     $('#csv').onclick = () => {
       const rows = [['Estado', 'Usuario', 'Nombre completo', 'Hora']]
         .concat(d.presentes.map(p => ['Presente', p.nombre, p.nombre_completo || '', hora(p.hora)]))
-        .concat(d.ausentes.map(p => ['Falta', p.nombre, p.nombre_completo || '', '']));
+        .concat(ausentesReales.map(p => ['Falta', p.nombre, p.nombre_completo || '', '']));
       downloadText(`asistencia-${d.fecha}.csv`, rows.map(r => r.map(csv).join(',')).join('\n'));
     };
   };
@@ -229,8 +232,8 @@
           <span class="muted sm-text">@${esc(p.nombre)}</span>
         </div>
         <div class="acts">
-          <button class="primary sm" data-act="ficha">Ver QR / Ficha</button>
-          <button class="ghost sm" data-act="asist">Marcar hoy</button>
+          <button class="primary sm" data-act="ficha">${p.rol === 'user' ? 'Ver QR / Ficha' : 'Ver Perfil'}</button>
+          ${p.rol === 'user' ? `<button class="ghost sm" data-act="asist">Marcar hoy</button>` : ''}
           ${isSudo() ? '<button class="ghost sm danger-text" data-act="borrar" style="color:var(--bad)">Eliminar</button>' : ''}
         </div>
       </div>`).join('') : '<p class="muted center">No hay personas para mostrar.</p>';
@@ -259,10 +262,10 @@
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  /* ---------- Nueva persona (genera y guarda el QR) ---------- */
+  /* ---------- Nueva persona ---------- */
   function openNuevo() {
     modal(`
-      <h3 style="color: var(--brand); text-align: center;">Registrar Nueva Persona</h3>
+      <h3 style="color: var(--brand); text-align: center;">Registrar Nuevo Usuario</h3>
       <form id="f-nuevo">
         <div class="grid2">
           <label>Nombre de usuario (Login)<input name="nombre" required minlength="2" autocapitalize="none" autocomplete="off"></label>
@@ -273,7 +276,7 @@
         <p id="f-err" class="error"></p>
         <div class="row end" style="margin-top: 1rem;">
           <button type="button" class="ghost" data-close>Cancelar</button>
-          <button class="primary" type="submit">Guardar y Generar QR</button>
+          <button class="primary" type="submit">Guardar</button>
         </div>
       </form>`);
       
@@ -281,7 +284,7 @@
       e.preventDefault();
       const f = new FormData(e.target);
       const btn = e.target.querySelector('[type=submit]');
-      btn.disabled = true; $('#f-err').textContent = 'Creando persona y generando QR...';
+      btn.disabled = true; $('#f-err').textContent = 'Guardando usuario...';
       let u;
       try {
         u = await Api.crearUsuario({
@@ -291,38 +294,39 @@
       } catch (err) { $('#f-err').textContent = err.message; btn.disabled = false; return; }
 
       let img = null;
-      try { 
-        const codeText = u.qr_codigo || u.id; 
-        img = await makeQR(codeText); 
-        await Api.guardarQr(u.id, img); 
-        u.qr_imagen = img; 
-      }
-      catch (error) { 
-        console.error(error);
-        toast('Persona creada. Revisa tu conexión a internet para cargar su imagen QR.', 'error'); 
+      // SOLO generamos el QR si es un Participante ('user')
+      if (u.rol === 'user') {
+        try { 
+          const codeText = u.qr_codigo || u.id; 
+          img = await makeQR(codeText); 
+          await Api.guardarQr(u.id, img); 
+          u.qr_imagen = img; 
+        }
+        catch (error) { 
+          toast('Persona creada. Revisa tu conexión a internet para cargar su imagen QR.', 'error'); 
+        }
       }
 
       state.personas.push(u);
       state.personas.sort((a, b) => a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase()));
       renderLista();
-      if (img) showQR(u, img, f.get('password'));
-      else close();
+      showSuccess(u, img, f.get('password'));
     };
   }
 
-  function showQR(u, img, pass) {
+  function showSuccess(u, img, pass) {
+    const isUser = u.rol === 'user';
     modal(`
       <h3 style="text-align:center; color: var(--ok);">¡Registro Exitoso!</h3>
       <div class="qr-box">
-        <img src="${img}" alt="Código QR de ${esc(nombreDe(u))}">
-        <p style="font-size: 1.1rem;"><strong>${esc(nombreDe(u))}</strong></p>
+        ${isUser && img ? `<img src="${img}" alt="Código QR de ${esc(nombreDe(u))}"><p style="font-size: 1.1rem;"><strong>${esc(nombreDe(u))}</strong></p>` : `<p style="font-size: 1.2rem; margin-top: 1rem;"><strong>${esc(nombreDe(u))} <span class="badge ${u.rol}">${ROL[u.rol]}</span></strong></p>`}
         <p class="muted">Usuario: <strong>${esc(u.nombre)}</strong> <br> Contraseña: <strong>${esc(pass)}</strong></p>
         <div class="row" style="justify-content:center; margin-top: 1rem;">
-          <button class="primary" id="dl-qr">Descargar QR</button>
+          ${isUser && img ? `<button class="primary" id="dl-qr">Descargar QR</button>` : ''}
           <button class="ghost" data-close>Cerrar</button>
         </div>
       </div>`);
-    $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
+    if (isUser && img) $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
   }
 
   /* ---------- Ficha (ver/editar) ---------- */
@@ -347,26 +351,32 @@
       base && base.rol === 'user' ? Api.perfil(id) : Promise.resolve(null)
     ]);
     
+    const isUser = u.rol === 'user';
     let img = u.qr_imagen;
-    if (!img) { 
+    
+    // Solo generamos QR de emergencia si es participante
+    if (isUser && !img) { 
       try {
         const codeText = u.qr_codigo || u.id;
         img = await makeQR(codeText); 
         Api.guardarQr(id, img).catch(() => {}); 
       } catch (err) {
-        img = null; // Previene que rompa la pantalla si no hay internet
+        img = null; 
       }
     }
+
+    const qrBoxHTML = isUser ? `
+      <div class="qr-box">
+        ${img ? `<img src="${img}" alt="QR de ${esc(nombreDe(u))}"><p><button class="primary sm" id="dl-qr" style="width:100%">Descargar QR</button></p>` 
+              : `<p class="muted" style="padding: 2rem; border: 1px dashed var(--line); border-radius:12px;">⚠️ No se pudo generar el QR por problemas de red.</p>`}
+      </div>` : '';
 
     modal(`
       <h3 style="text-align:center;">${esc(nombreDe(u))} <span class="badge ${u.rol}">${ROL[u.rol]}</span></h3>
       <p class="muted sm-text center" style="margin-top:-10px;">@${esc(u.nombre)}</p>
       
-      <div class="ficha">
-        <div class="qr-box">
-          ${img ? `<img src="${img}" alt="QR de ${esc(nombreDe(u))}"><p><button class="primary sm" id="dl-qr" style="width:100%">Descargar QR</button></p>` 
-                : `<p class="muted" style="padding: 2rem; border: 1px dashed var(--line); border-radius:12px;">⚠️ No se pudo generar el QR por problemas de red.</p>`}
-        </div>
+      <div class="ficha" ${!isUser ? 'style="grid-template-columns: 1fr;"' : ''}>
+        ${qrBoxHTML}
         <div class="ficha-datos">
           <form id="f-ficha">
             <label>Nombre completo<input name="nombre_completo" value="${esc(u.nombre_completo)}"></label>
@@ -381,9 +391,9 @@
           </div>` : ''}
         </div>
       </div>
-      ${perfil ? perfilHTML(perfil) : ''}`);
+      ${isUser && perfil ? perfilHTML(perfil) : ''}`);
 
-    if (img) {
+    if (isUser && img) {
       $('#dl-qr').onclick = () => download(`qr-${slug(u.nombre)}.png`, img);
     }
     
@@ -408,12 +418,14 @@
     }
   }
 
-  /* ===================== Ranking (Solo asistencias) ===================== */
+  /* ===================== Ranking (Solo asistencias, Solo PARTICIPANTES) ===================== */
   views.ranking = async el => {
     const rows = await Api.ranking();
     
-    // Forzamos el orden por número de asistencias de mayor a menor
-    const validos = rows.filter(r => r.rol === 'user' || r.asistencias !== undefined);
+    // Filtro estricto: Solo incluimos a los que tienen rol 'user'
+    const validos = rows.filter(r => r.rol === 'user');
+    
+    // Ordenamos de mayor a menor asistencia
     validos.sort((a, b) => (b.asistencias || 0) - (a.asistencias || 0));
 
     let pos = 0, prev = null, i = 0;
