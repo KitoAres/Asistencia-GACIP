@@ -208,7 +208,7 @@
         <div class="avatar">${esc(inicial(p))}</div>
         <div class="info">
           <strong>${esc(nombreDe(p))}<span class="badge ${p.rol}">${ROL[p.rol]}</span></strong>
-          <span class="muted sm-text">@${esc(p.nombre)}${p.carrera ? ' · ' + esc(p.carrera) : ''}</span>
+          <span class="muted sm-text">@${esc(p.nombre)}</span>
         </div>
         <div class="acts">
           <button class="ghost sm" data-act="ficha">Ficha</button>
@@ -253,14 +253,7 @@
           <label>Contraseña<input name="password" required minlength="4" autocomplete="off"></label>
         </div>
         <label>Rol<select name="rol"><option value="user">Participante</option><option value="admin">Admin</option></select></label>
-        <div class="grid2">
-          <label>Nombre completo<input name="nombre_completo"></label>
-          <label>Carrera<input name="carrera"></label>
-        </div>
-        <div class="grid2">
-          <label>Semestre<input name="semestre"></label>
-          <label>Teléfono<input name="telefono" inputmode="tel"></label>
-        </div>
+        <label>Nombre completo<input name="nombre_completo"></label>
         <label>Observaciones<textarea name="observaciones"></textarea></label>
         <p id="f-err" class="error"></p>
         <div class="row end"><button type="button" class="ghost" data-close>Cancelar</button><button class="primary" type="submit">Crear y generar QR</button></div>
@@ -274,7 +267,7 @@
       try {
         u = await Api.crearUsuario({
           nombre: f.get('nombre'), password: f.get('password'), rol: f.get('rol'),
-          ficha: { nombre_completo: f.get('nombre_completo'), carrera: f.get('carrera'), semestre: f.get('semestre'), telefono: f.get('telefono'), observaciones: f.get('observaciones') }
+          ficha: { nombre_completo: f.get('nombre_completo'), observaciones: f.get('observaciones') }
         });
       } catch (err) { $('#f-err').textContent = err.message; btn.disabled = false; return; }
 
@@ -337,11 +330,6 @@
         </div>
         <form id="f-ficha">
           <label>Nombre completo<input name="nombre_completo" value="${esc(u.nombre_completo)}"></label>
-          <div class="grid2">
-            <label>Carrera<input name="carrera" value="${esc(u.carrera)}"></label>
-            <label>Semestre<input name="semestre" value="${esc(u.semestre)}"></label>
-          </div>
-          <label>Teléfono<input name="telefono" inputmode="tel" value="${esc(u.telefono)}"></label>
           <label>Observaciones<textarea name="observaciones">${esc(u.observaciones)}</textarea></label>
           <div class="row end"><button class="primary" type="submit">Guardar cambios</button></div>
         </form>
@@ -463,7 +451,7 @@
             </div>
             <div>
               <h2>${esc(nombreDe(me))}</h2>
-              <p class="muted">@${esc(me.nombre)}${me.carrera ? ' · ' + esc(me.carrera) : ''}${me.semestre ? ' · ' + esc(me.semestre) : ''}</p>
+              <p class="muted">@${esc(me.nombre)}</p>
               ${perfilHTML(perfil, false)}
             </div>
           </div>
